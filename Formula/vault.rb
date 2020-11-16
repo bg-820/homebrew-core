@@ -6,7 +6,7 @@ class Vault < Formula
   homepage "https://vaultproject.io/"
   url "https://github.com/hashicorp/vault.git",
       tag:      "v0.7.3",
-      revision: "7ce0bd9691998e0443bc77e98b1e2a4ab1e965d4"
+      revision: "0b20ae0b9b7a748d607082b1add3663a28e31b68"
   license "MPL-2.0"
   head "https://github.com/hashicorp/vault.git"
 
