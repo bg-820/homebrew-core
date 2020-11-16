@@ -1,3 +1,5 @@
+require "language/go"
+
 # Please don't update this formula until the release is official via
 # mailing list or blog post. There's a history of GitHub tags moving around.
 # https://github.com/hashicorp/vault/issues/1051
@@ -5,75 +7,57 @@ class Vault < Formula
   desc "Secures, stores, and tightly controls access to secrets"
   homepage "https://vaultproject.io/"
   url "https://github.com/hashicorp/vault.git",
-      tag:      "v1.6.0",
-      revision: "7ce0bd9691998e0443bc77e98b1e2a4ab1e965d4"
-  license "MPL-2.0"
+      :tag => "v0.7.3",
+      :revision => "0b20ae0b9b7a748d607082b1add3663a28e31b68"
   head "https://github.com/hashicorp/vault.git"
-
-  livecheck do
-    url "https://releases.hashicorp.com/vault/"
-    regex(%r{href=.*?v?(\d+(?:\.\d+)+)/?["' >]}i)
-  end
 
   bottle do
     cellar :any_skip_relocation
-    sha256 "c08407834227377e70b5bdfc3d37c34c979802422e68258fae52c3f60edcf640" => :catalina
-    sha256 "f5201fe3cfb3d2611a60ccaf9408115fd291ff591fca714e0c239be304da5d0b" => :mojave
-    sha256 "5a6051ee29c5a9ec0aee723e2b36e7334b88788952f48db250c19be6c83d7bcc" => :high_sierra
+    sha256 "4c81038662974f137ce1df832e96d06a987ac812f424ba0cef6f9c68882c4cb8" => :sierra
+    sha256 "6ea967a9a93b18909d1d7db28c08c74ac0b7e17f0c2e13de840d048a35496cef" => :el_capitan
+    sha256 "cfa4eb979c071e24170d06191cb4e0b5b7ea7bef0cdd0574e7fc34d766b85d51" => :yosemite
   end
+
+  option "with-dynamic", "Build dynamic binary with CGO_ENABLED=1"
 
   depends_on "go" => :build
-  depends_on "gox" => :build
-  depends_on "node@10" => :build
-  depends_on "yarn" => :build
 
-  def install
-    ENV.prepend_path "PATH", "#{ENV["GOPATH"]}/bin"
-    system "make", "bootstrap", "static-dist", "dev-ui"
-    bin.install "bin/vault"
+  go_resource "github.com/mitchellh/iochan" do
+    url "https://github.com/mitchellh/iochan.git",
+        :revision => "87b45ffd0e9581375c491fef3d32130bb15c5bd7"
   end
 
-  plist_options manual: "vault server -dev"
+  go_resource "github.com/mitchellh/gox" do
+    url "https://github.com/mitchellh/gox.git",
+        :revision => "c9740af9c6574448fd48eb30a71f964014c7a837"
+  end
 
-  def plist
-    <<~EOS
-      <?xml version="1.0" encoding="UTF-8"?>
-      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-      <plist version="1.0">
-        <dict>
-          <key>KeepAlive</key>
-          <dict>
-            <key>SuccessfulExit</key>
-            <false/>
-          </dict>
-          <key>Label</key>
-          <string>#{plist_name}</string>
-          <key>ProgramArguments</key>
-          <array>
-            <string>#{opt_bin}/vault</string>
-            <string>server</string>
-            <string>-dev</string>
-          </array>
-          <key>RunAtLoad</key>
-          <true/>
-          <key>WorkingDirectory</key>
-          <string>#{var}</string>
-          <key>StandardErrorPath</key>
-          <string>#{var}/log/vault.log</string>
-          <key>StandardOutPath</key>
-          <string>#{var}/log/vault.log</string>
-        </dict>
-      </plist>
-    EOS
+  def install
+    ENV["GOPATH"] = buildpath
+
+    contents = buildpath.children - [buildpath/".brew_home"]
+    (buildpath/"src/github.com/hashicorp/vault").install contents
+
+    ENV.prepend_create_path "PATH", buildpath/"bin"
+
+    Language::Go.stage_deps resources, buildpath/"src"
+
+    cd "src/github.com/mitchellh/gox" do
+      system "go", "install"
+    end
+
+    cd "src/github.com/hashicorp/vault" do
+      target = build.with?("dynamic") ? "dev-dynamic" : "dev"
+      system "make", target
+      bin.install "bin/vault"
+      prefix.install_metafiles
+    end
   end
 
   test do
-    port = free_port
-    ENV["VAULT_DEV_LISTEN_ADDRESS"] = "127.0.0.1:#{port}"
-    ENV["VAULT_ADDR"] = "http://127.0.0.1:#{port}"
-
     pid = fork { exec bin/"vault", "server", "-dev" }
     sleep 1
+    ENV.append "VAULT_ADDR", "http://127.0.0.1:8200"
     system bin/"vault", "status"
     Process.kill("TERM", pid)
   end
